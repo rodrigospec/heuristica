@@ -1,1 +1,579 @@
 
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Rutas · A*</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #172338;
+            --muted: #657287;
+            --border: #dce3ec;
+            --bg: #f5f7fa;
+            --accent: #2563eb;
+            --surface: #fff
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html {
+            min-width: 0
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font: 400 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+            overflow-x: hidden
+        }
+
+        button,
+        select,
+        input {
+            font: inherit
+        }
+
+        button {
+            touch-action: manipulation
+        }
+
+        button:focus-visible,
+        input:focus-visible {
+            outline: 3px solid #93c5fd;
+            outline-offset: 2px
+        }
+
+        .shell {
+            width: min(100% - 32px, 1180px);
+            margin: 0 auto;
+            padding: clamp(14px, 2.4vw, 32px) 0 40px;
+            min-width: 0
+        }
+
+        .header {
+            margin: 0 0 18px
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: clamp(1.3rem, 3vw, 1.8rem);
+            letter-spacing: -.035em
+        }
+
+        .header p {
+            margin: 3px 0 0;
+            color: var(--muted);
+            font-size: clamp(.82rem, 1.6vw, .94rem)
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+            gap: clamp(12px, 2vw, 24px);
+            align-items: start;
+            min-width: 0
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            min-width: 0;
+            box-shadow: 0 4px 22px rgba(22, 34, 50, .035)
+        }
+
+        .map-card {
+            padding: clamp(9px, 1.5vw, 18px)
+        }
+
+        .map-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px
+        }
+
+        .map-top strong {
+            font-size: .92rem
+        }
+
+        .status {
+            font-size: .78rem;
+            color: #075985;
+            background: #e0f2fe;
+            border-radius: 999px;
+            padding: 4px 10px
+        }
+
+        .board-wrap {
+            width: 100%;
+            max-width: 680px;
+            margin: 0 auto;
+            min-width: 0
+        }
+
+        .board {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(16, minmax(0, 1fr));
+            width: 100%;
+            aspect-ratio: 1;
+            gap: clamp(1px, .21vw, 3px);
+            background: #e5eaf0;
+            padding: clamp(2px, .4vw, 5px);
+            border-radius: 10px;
+            overflow: hidden;
+            isolation: isolate
+        }
+
+        .tile {
+            border: 0;
+            margin: 0;
+            padding: 0;
+            min-width: 0;
+            min-height: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: clamp(1px, .3vw, 4px);
+            background: #fff;
+            cursor: pointer;
+            position: relative;
+            transition: background-color 160ms ease
+        }
+
+        .tile.wall {
+            background: #28384d
+        }
+
+        .tile.traffic {
+            background: #f6bb7d
+        }
+
+        .tile.visited {
+            background: #c4defc
+        }
+
+        .tile.path {
+            background: #9bdcbf
+        }
+
+        .tile.goal {
+            background: #fecb6c
+        }
+
+        .tile::after {
+            content: '';
+            position: absolute;
+            inset: 32%;
+            border-radius: 100%;
+            opacity: 0
+        }
+
+        .tile.goal::after {
+            background: #b45309;
+            opacity: 1
+        }
+
+        .tile:hover {
+            filter: brightness(.95)
+        }
+
+        .car {
+            position: absolute;
+            z-index: 5;
+            pointer-events: none;
+            left: 0;
+            top: 0;
+            width: calc((100% - 2 * clamp(2px, .4vw, 5px) - 15 * clamp(1px, .21vw, 3px)) / 16);
+            height: calc((100% - 2 * clamp(2px, .4vw, 5px) - 15 * clamp(1px, .21vw, 3px)) / 16);
+            border-radius: 50%;
+            background: #2563eb;
+            box-shadow: 0 1px 7px #1243a177, 0 0 0 2px white;
+            transition: transform 280ms linear;
+            display: grid;
+            place-items: center;
+            color: white;
+            font-weight: 800;
+            font-size: clamp(7px, 1.35vw, 14px)
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            margin-top: 12px;
+            font-size: .76rem;
+            color: var(--muted)
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            flex: none
+        }
+
+        .side {
+            padding: 18px;
+            display: grid;
+            gap: 18px
+        }
+
+        .section-title {
+            font-weight: 700;
+            font-size: .9rem;
+            margin: 0 0 9px
+        }
+
+        .btn-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px
+        }
+
+        .btn {
+            border: 1px solid #cbd5e1;
+            background: white;
+            border-radius: 10px;
+            min-height: 42px;
+            padding: 8px 10px;
+            color: var(--ink);
+            cursor: pointer;
+            font-size: .85rem;
+            font-weight: 600;
+            white-space: normal
+        }
+
+        .btn.primary {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb
+        }
+
+        .btn.active {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border-color: #60a5fa
+        }
+
+        .btn:disabled {
+            opacity: .5;
+            cursor: not-allowed
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px
+        }
+
+        .stat {
+            background: #f5f7fb;
+            border: 1px solid #e8edf3;
+            padding: 10px;
+            border-radius: 10px;
+            min-width: 0
+        }
+
+        .stat b {
+            display: block;
+            font-size: 1.2rem;
+            line-height: 1.3;
+            font-variant-numeric: tabular-nums
+        }
+
+        .stat small {
+            color: var(--muted);
+            font-size: .72rem
+        }
+
+        .range {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .range input {
+            width: 100%;
+            min-width: 0;
+            accent-color: #2563eb
+        }
+
+        .range small {
+            white-space: nowrap;
+            color: var(--muted)
+        }
+
+        .notice {
+            font-size: .79rem;
+            color: var(--muted);
+            margin: 0
+        }
+
+        .events {
+            font-size: .77rem;
+            color: var(--muted);
+            max-height: 100px;
+            overflow: auto;
+            overflow-wrap: anywhere
+        }
+
+        .events div {
+            padding: 4px 0;
+            border-bottom: 1px solid #eef1f6
+        }
+
+        @media(max-width:850px) {
+            .workspace {
+                grid-template-columns: minmax(0, 1fr)
+            }
+
+            .side {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                align-items: start
+            }
+
+            .side .span-all {
+                grid-column: 1/-1
+            }
+
+            .board-wrap {
+                max-width: min(100%, 620px)
+            }
+        }
+
+        @media(max-width:540px) {
+            .shell {
+                width: calc(100% - 20px);
+                padding: 12px 0 24px
+            }
+
+            .header {
+                margin-bottom: 12px
+            }
+
+            .card {
+                border-radius: 12px
+            }
+
+            .map-card {
+                padding: 8px
+            }
+
+            .map-top {
+                padding: 2px 2px 0
+            }
+
+            .map-top strong {
+                font-size: .83rem
+            }
+
+            .status {
+                font-size: .71rem;
+                padding: 3px 7px
+            }
+
+            .board {
+                gap: 1px;
+                padding: 2px;
+                border-radius: 6px
+            }
+
+            .tile {
+                border-radius: 1px
+            }
+
+            .car {
+                width: calc((100% - 4px - 15px)/16);
+                height: calc((100% - 4px - 15px)/16);
+                font-size: 8px
+            }
+
+            .legend {
+                gap: 5px 10px;
+                font-size: .68rem;
+                margin-top: 9px
+            }
+
+            .dot {
+                width: 8px;
+                height: 8px
+            }
+
+            .side {
+                padding: 12px;
+                grid-template-columns: minmax(0, 1fr);
+                gap: 14px
+            }
+
+            .side .span-all {
+                grid-column: auto
+            }
+
+            .section-title {
+                margin-bottom: 7px
+            }
+
+            .btn {
+                min-height: 44px;
+                font-size: .79rem;
+                padding: 7px
+            }
+
+            .stats {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 5px
+            }
+
+            .stat {
+                padding: 8px 5px;
+                text-align: center
+            }
+
+            .stat b {
+                font-size: 1rem
+            }
+
+            .stat small {
+                font-size: .63rem;
+                line-height: 1.2;
+                display: block
+            }
+        }
+
+        @media(max-width:340px) {
+            .stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr))
+            }
+
+            .header h1 {
+                font-size: 1.2rem
+            }
+
+            .btn-row,
+            .actions {
+                gap: 5px
+            }
+
+            .btn {
+                font-size: .72rem;
+                padding: 5px
+            }
+        }
+
+        @media(prefers-reduced-motion:reduce) {
+
+            .car,
+            .tile {
+                transition: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="shell">
+        <header class="header">
+            <h1>Simulador de rutas A*</h1>
+            <p>Búsqueda heurística con obstáculos que cambian durante el recorrido.</p>
+        </header>
+        <div class="workspace">
+            <section class="card map-card" aria-label="Mapa interactivo">
+                <div class="map-top"><strong>Mapa 16 × 16</strong><span id="status" class="status"
+                        aria-live="polite">Ruta preparada</span></div>
+                <div class="board-wrap">
+                    <div class="board" id="board" aria-label="Ciudad de 16 filas y 16 columnas">
+                        <div class="car" id="car" aria-label="Vehículo">●</div>
+                    </div>
+                </div>
+                <div class="legend"><span><i class="dot" style="background:#2563eb"></i>Vehículo</span><span><i
+                            class="dot" style="background:#fecb6c"></i>Meta</span><span><i class="dot"
+                            style="background:#28384d"></i>Bloqueo</span><span><i class="dot"
+                            style="background:#f6bb7d"></i>Tráfico</span><span><i class="dot"
+                            style="background:#9bdcbf"></i>Ruta</span><span><i class="dot"
+                            style="background:#c4defc"></i>Explorado</span></div>
+            </section>
+            <aside class="card side">
+                <section>
+                    <h2 class="section-title">Recorrido</h2>
+                    <div class="actions"><button class="btn primary" id="play">Iniciar</button><button class="btn"
+                            id="step">Un paso</button><button class="btn" id="incident">Crear obstáculo</button><button
+                            class="btn" id="reset">Reiniciar</button></div>
+                </section>
+                <section>
+                    <h2 class="section-title">Editar mapa</h2>
+                    <div class="btn-row" id="tools"><button class="btn active" data-tool="wall">Bloquear
+                            calle</button><button class="btn" data-tool="traffic">Cambiar tráfico</button><button
+                            class="btn" data-tool="goal">Mover destino</button><button class="btn"
+                            data-tool="start">Mover vehículo</button></div>
+                </section>
+                <section>
+                    <h2 class="section-title">Velocidad</h2>
+                    <div class="range"><input id="speed" type="range" min="1" max="5" value="3"
+                            aria-label="Velocidad del vehículo"><small id="speedLabel">Normal</small></div>
+                    <p class="notice">Durante el movimiento aparecen incidentes. A* recalcula la ruta si cambia el
+                        camino.</p>
+                </section>
+                <section>
+                    <h2 class="section-title">Resultados</h2>
+                    <div class="stats">
+                        <div class="stat"><b id="cost">—</b><small>Costo</small></div>
+                        <div class="stat"><b id="nodes">0</b><small>Nodos</small></div>
+                        <div class="stat"><b id="steps">0</b><small>Pasos</small></div>
+                        <div class="stat"><b id="changes">0</b><small>Recálculos</small></div>
+                    </div>
+                </section>
+                <section class="span-all">
+                    <h2 class="section-title">Actividad</h2>
+                    <div class="events" id="events" aria-live="polite"></div>
+                </section>
+            </aside>
+        </div>
+    </main>
+    <script>
+        (() => {
+            'use strict';
+            const N = 16, TOTAL = N * N, board = document.getElementById('board'), car = document.getElementById('car'); const el = id => document.getElementById(id); const tiles = []; const walls = new Set(), traffic = new Set(); let current = 0, goal = 255, start = 0, path = [], explored = new Set(), mode = 'wall', running = false, clock = null, steps = 0, replans = 0, tick = 0;
+            const xy = i => [i % N, Math.floor(i / N)], index = (x, y) => y * N + x, within = (x, y) => x >= 0 && y >= 0 && x < N && y < N, dist = (a, b) => { const [x, y] = xy(a), [u, v] = xy(b); return Math.abs(x - u) + Math.abs(y - v) };
+            const base = ['................', '..###...........', '......#....###..', '...#..#.........', '...#.....###....', '...###..........', '.........#......', '..####...#..##..', '.........#......', '....##..........', '.........###....', '...#............', '...#..##........', '...#......###...', '................', '................'];
+            function seed() { walls.clear(); traffic.clear(); base.forEach((line, y) => [...line].forEach((ch, x) => { if (ch === '#') walls.add(index(x, y)) })); for (const i of [5, 6, 20, 21, 74, 75, 103, 104, 173, 174, 200, 218, 236]) if (!walls.has(i)) traffic.add(i) }
+            for (let i = 0; i < TOTAL; i++) { const b = document.createElement('button'); b.className = 'tile'; b.type = 'button'; b.setAttribute('aria-label', `Fila ${Math.floor(i / N) + 1}, columna ${i % N + 1}`); b.onclick = () => edit(i); board.insertBefore(b, car); tiles.push(b) }
+            function search() { const open = [{ id: current, g: 0, f: dist(current, goal) }], best = new Map([[current, 0]]), parent = new Map(), seen = new Set(); while (open.length) { open.sort((a, b) => a.f - b.f || a.g - b.g); const n = open.shift(); if (seen.has(n.id) || best.get(n.id) !== n.g) continue; seen.add(n.id); if (n.id === goal) { const route = [n.id]; let p = n.id; while (parent.has(p)) { p = parent.get(p); route.push(p) } return { route: route.reverse(), cost: n.g, seen } } const [x, y] = xy(n.id); for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) { const a = x + dx, b = y + dy; if (!within(a, b)) continue; const j = index(a, b); if (walls.has(j) || seen.has(j)) continue; const g = n.g + (traffic.has(j) ? 5 : 1); if (g < (best.get(j) ?? Infinity)) { best.set(j, g); parent.set(j, n.id); open.push({ id: j, g, f: g + dist(j, goal) }) } } } return { route: [], cost: null, seen } }
+            function log(message) { const node = document.createElement('div'); node.textContent = message; el('events').prepend(node); while (el('events').children.length > 4) el('events').lastChild.remove() }
+            function placeCar() { const cell = tiles[current], boardRect = board.getBoundingClientRect(), r = cell.getBoundingClientRect(); car.style.width = r.width + 'px'; car.style.height = r.height + 'px'; car.style.transform = `translate(${r.left - boardRect.left}px,${r.top - boardRect.top}px)` }
+            function render() { const inPath = new Set(path); for (let i = 0; i < TOTAL; i++) { const classes = ['tile']; if (walls.has(i)) classes.push('wall'); else if (traffic.has(i)) classes.push('traffic'); if (explored.has(i) && !walls.has(i)) classes.push('visited'); if (inPath.has(i) && i !== goal && i !== current) classes.push('path'); if (i === goal) classes.push('goal'); tiles[i].className = classes.join(' ') } placeCar() }
+            function stop() { running = false; if (clock !== null) clearTimeout(clock); clock = null; el('play').textContent = 'Iniciar' }
+            function recompute(reason) { const result = search(); path = result.route; explored = result.seen; replans++; el('cost').textContent = result.cost ?? '∞'; el('nodes').textContent = explored.size; el('steps').textContent = steps; el('changes').textContent = Math.max(0, replans - 1); if (current === goal) { el('status').textContent = 'Destino alcanzado'; stop() } else if (!path.length) { el('status').textContent = 'Sin ruta disponible'; stop() } else el('status').textContent = running ? 'En movimiento' : 'Ruta preparada'; if (reason) log(reason); render() }
+            function incident() { const routeCandidates = path.slice(2).filter(i => i !== goal && i !== current && !walls.has(i)); let options = routeCandidates.length ? routeCandidates : tiles.map((_, i) => i).filter(i => !walls.has(i) && i !== current && i !== goal); if (!options.length) return; const chosen = options[Math.floor(Math.random() * options.length)]; if (Math.random() < .8) { walls.add(chosen); traffic.delete(chosen); recompute('Calle cerrada: buscando alternativa') } else { traffic.add(chosen); recompute('Tráfico nuevo: ruta revisada') } }
+            function advance() { if (current === goal) { stop(); return } if (path.length < 2) { recompute('Buscando ruta'); if (path.length < 2) return } current = path[1]; steps++; tick++; recompute(''); if (running && current !== goal && tick % 3 === 0) incident(); }
+            const delays = [0, 950, 700, 480, 300, 190]; function schedule() { if (!running) return; clock = setTimeout(() => { advance(); schedule() }, delays[+el('speed').value]) }
+            function toggle() { if (running) { stop(); el('status').textContent = 'En pausa'; return } if (current === goal) return; recompute('Recorrido iniciado'); if (!path.length) return; running = true; el('play').textContent = 'Pausar'; el('status').textContent = 'En movimiento'; schedule() }
+            function edit(i) { if (mode === 'wall') { if (i === current || i === goal) return; walls.has(i) ? walls.delete(i) : (walls.add(i), traffic.delete(i)) } if (mode === 'traffic') { if (i === current || i === goal || walls.has(i)) return; traffic.has(i) ? traffic.delete(i) : traffic.add(i) } if (mode === 'goal') { if (i === current || walls.has(i)) return; goal = i } if (mode === 'start') { if (i === goal || walls.has(i)) return; current = start = i; steps = 0 } recompute('Mapa actualizado') }
+            function reset() { stop(); seed(); current = start = 0; goal = 255; steps = 0; replans = 0; tick = 0; el('events').textContent = ''; recompute('Mapa reiniciado') }
+            el('play').onclick = toggle; el('step').onclick = () => { stop(); advance() }; el('incident').onclick = incident; el('reset').onclick = reset; el('speed').oninput = () => { el('speedLabel').textContent = ['', 'Lenta', 'Suave', 'Normal', 'Rápida', 'Muy rápida'][+el('speed').value]; if (running) { clearTimeout(clock); schedule() } }; el('tools').onclick = e => { const b = e.target.closest('[data-tool]'); if (!b) return; mode = b.dataset.tool; for (const x of el('tools').querySelectorAll('[data-tool]')) x.classList.toggle('active', x === b) };
+            if (typeof ResizeObserver !== 'undefined') new ResizeObserver(placeCar).observe(board); else window.addEventListener('resize', placeCar); seed(); recompute('Ruta inicial calculada');
+        })();
+    </script>
+</body>
+
+</html>
